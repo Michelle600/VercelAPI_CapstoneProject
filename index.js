@@ -20,6 +20,7 @@ const pool = new Pool({
     },
 });
 
+
 // Signup endpoint
 app.post("/signup", async (req, res) => {
     const client = await pool.connect();
