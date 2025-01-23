@@ -100,59 +100,70 @@ app.post("/login", async (req, res) => {
     }
 });
 
+// authenticate user
+const authenticateUser = (req, res, next) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(401).json({ message: "Unauthorized: No token provided" });
+    }
+
+    try {
+        const decodedToken = jwt.verify(token, SECRET_KEY);
+        req.user = { id: decodedToken.id, username: decodedToken.username };
+        next();
+    } catch (error) {
+        console.error("Error verifying JWT token:", error);
+        res.status(401).json({ message: "Unauthorized: Invalid token" });
+    }
+};
+
+
 // post - Create expenses
-app.post("/expenses", async (req, res) => {
+app.post("/expenses", authenticateUser, async (req, res) => {
     const client = await pool.connect();
     try {
-        const data = {
-            user_id: req.body.user_id,
-            title: req.body.title,
-            amount: req.body.amount,
-            date: req.body.date,
-            imageUrl: req.body.imageUrl,
-        };
+        const userId = req.user.id;
+        const { title, amount, date, imageUrl } = req.body;
+
         const query =
-            "INSERT INTO expenses (user_id, title, amount, date,imageUrl) VALUES ($1, $2, $3, $4, $5) RETURNING id";
-        const params = [
-            data.user_id,
-            data.title,
-            data.amount,
-            data.date,
-            data.imageUrl,
-        ];
+            "INSERT INTO expenses (user_id, title, amount, date, imageUrl) VALUES ($1, $2, $3, $4, $5) RETURNING id";
+        const params = [userId, title, amount, date, imageUrl];
 
         const result = await client.query(query, params);
-        data.id = result.rows[0].id;
+        const newExpenseId = result.rows[0].id;
 
-        console.log(`Expenses created successfully with id ${data.id}`);
         res.json({
             status: "success",
-            data: data,
-            message: "Expenses created successfully",
+            data: { id: newExpenseId, user_id: userId, title, amount, date, imageUrl },
+            message: "Expense created successfully",
         });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error });
+        console.error("Error creating expense:", error);
+        res.status(500).json({ error: "Failed to create expense" });
     } finally {
         client.release();
     }
 });
+
 
 // get - Read expenses
-app.get("/expenses", async (req, res) => {
+app.get("/expenses", authenticateUser, async (req, res) => {
     const client = await pool.connect();
+    const userId = req.user.id;
+
+    const query = "SELECT * FROM expenses WHERE user_id = $1";
 
     try {
-        const query = "SELECT * FROM expenses";
-        const result = await client.query(query);
+        const result = await client.query(query, [userId]);
         res.json(result.rows);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error });
+        console.error("Error fetching expenses:", error);
+        res.status(500).json({ error: "Failed to fetch expenses" });
     } finally {
         client.release();
     }
 });
+
 
 // put - Update expenses
 
