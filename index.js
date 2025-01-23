@@ -142,9 +142,11 @@ app.post("/expenses", async (req, res) => {
 app.get("/expenses", async (req, res) => {
     const client = await pool.connect();
 
+    const userFirebaseID = req.user.firebaseUID;
+    const query = 'SELECT * FROM expenses WHERE userFirebaseID = $1'
+
     try {
-        const query = "SELECT * FROM expenses";
-        const result = await client.query(query);
+        const result = await client.query(query, [userFirebaseID]);
         res.json(result.rows);
     } catch (error) {
         console.error(error);
