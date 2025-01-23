@@ -100,22 +100,31 @@ app.post("/login", async (req, res) => {
     }
 });
 
+// authorization
+const authorize = (req, res, next) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(401).json({ error: "Authorization token required" });
+    }
+
+    try {
+        const decoded = jwt.verify(token, SECRET_KEY);
+        req.user = decoded;
+        next();
+    } catch (error) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+    }
+};
+
+
 // post - Create expenses
-app.post("/expenses", async (req, res) => {
+app.post("/expenses", authorize, async (req, res) => {
+    const { title, amount, date, imageUrl } = req.body;
     const client = await pool.connect();
     try {
-        const { title, amount, date, imageUrl } = req.body;
+        const userFirebaseID = req.user.id; // Use user info from the middleware
 
-        const token = req.headers.authorization?.split(" ")[1];
-        if (!token) {
-            return res.status(401).json({ error: "Authorization token required" });
-        }
-
-        const decoded = jwt.verify(token, SECRET_KEY);
-        const userFirebaseID = decoded.id;
-
-        const query =
-            "INSERT INTO expenses (userFirebaseID, title, amount, date, imageUrl) VALUES ($1, $2, $3, $4, $5) RETURNING id";
+        const query = "INSERT INTO expenses (userFirebaseID, title, amount, date, imageUrl) VALUES ($1, $2, $3, $4, $5) RETURNING id";
         const params = [userFirebaseID, title, amount, date, imageUrl];
 
         const result = await client.query(query, params);
@@ -133,16 +142,10 @@ app.post("/expenses", async (req, res) => {
 });
 
 // get - Read expenses
-app.get("/expenses", async (req, res) => {
+app.get("/expenses", authorize, async (req, res) => {
     const client = await pool.connect();
     try {
-        const token = req.headers.authorization?.split(" ")[1];
-        if (!token) {
-            return res.status(401).json({ error: "Authorization token required" });
-        }
-
-        const decoded = jwt.verify(token, SECRET_KEY);
-        const userFirebaseID = decoded.id;
+        const userFirebaseID = req.user.id; // Use user info from the middleware
 
         const query = "SELECT * FROM expenses WHERE userFirebaseID = $1";
         const result = await client.query(query, [userFirebaseID]);
