@@ -100,70 +100,60 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// authenticate user
-const authenticateUser = (req, res, next) => {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-        return res.status(401).json({ message: "Unauthorized: No token provided" });
-    }
-
-    try {
-        const decodedToken = jwt.verify(token, SECRET_KEY);
-        req.user = { id: decodedToken.id, username: decodedToken.username };
-        next();
-    } catch (error) {
-        console.error("Error verifying JWT token:", error);
-        res.status(401).json({ message: "Unauthorized: Invalid token" });
-    }
-};
-
-
 // post - Create expenses
-app.post("/expenses", authenticateUser, async (req, res) => {
+app.post("/expenses", async (req, res) => {
     const client = await pool.connect();
     try {
-        const userId = req.user.id;
         const { title, amount, date, imageUrl } = req.body;
 
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ error: "Authorization token required" });
+        }
+
+        const decoded = jwt.verify(token, SECRET_KEY);
+        const userFirebaseID = decoded.id;
+
         const query =
-            "INSERT INTO expenses (user_id, title, amount, date, imageUrl) VALUES ($1, $2, $3, $4, $5) RETURNING id";
-        const params = [userId, title, amount, date, imageUrl];
+            "INSERT INTO expenses (userFirebaseID, title, amount, date, imageUrl) VALUES ($1, $2, $3, $4, $5) RETURNING id";
+        const params = [userFirebaseID, title, amount, date, imageUrl];
 
         const result = await client.query(query, params);
-        const newExpenseId = result.rows[0].id;
-
-        res.json({
+        res.status(201).json({
             status: "success",
-            data: { id: newExpenseId, user_id: userId, title, amount, date, imageUrl },
-            message: "Expense created successfully",
+            data: { id: result.rows[0].id, title, amount, date, imageUrl },
+            message: "Expenses created successfully",
         });
     } catch (error) {
-        console.error("Error creating expense:", error);
-        res.status(500).json({ error: "Failed to create expense" });
+        console.error(error);
+        res.status(500).json({ error: "Internal Server Error" });
     } finally {
         client.release();
     }
 });
-
 
 // get - Read expenses
-app.get("/expenses", authenticateUser, async (req, res) => {
+app.get("/expenses", async (req, res) => {
     const client = await pool.connect();
-    const userId = req.user.id;
-
-    const query = "SELECT * FROM expenses WHERE user_id = $1";
-
     try {
-        const result = await client.query(query, [userId]);
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ error: "Authorization token required" });
+        }
+
+        const decoded = jwt.verify(token, SECRET_KEY);
+        const userFirebaseID = decoded.id;
+
+        const query = "SELECT * FROM expenses WHERE userFirebaseID = $1";
+        const result = await client.query(query, [userFirebaseID]);
         res.json(result.rows);
     } catch (error) {
-        console.error("Error fetching expenses:", error);
-        res.status(500).json({ error: "Failed to fetch expenses" });
+        console.error(error);
+        res.status(500).json({ error: "Internal Server Error" });
     } finally {
         client.release();
     }
 });
-
 
 // put - Update expenses
 
