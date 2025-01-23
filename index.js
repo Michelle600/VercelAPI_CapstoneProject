@@ -100,38 +100,32 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// authorization
-const authorize = (req, res, next) => {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-        return res.status(401).json({ error: "Authorization token required" });
-    }
-
-    try {
-        const decoded = jwt.verify(token, SECRET_KEY);
-        req.user = decoded;
-        next();
-    } catch (error) {
-        return res.status(401).json({ error: "Invalid or expired token" });
-    }
-};
-
-
 // post - Create expenses
-app.post("/expenses", authorize, async (req, res) => {
-    const { title, amount, date, imageUrl } = req.body;
+app.post("/expenses", async (req, res) => {
     const client = await pool.connect();
     try {
-        const userFirebaseID = req.user.id; // Use user info from the middleware
+        const { title, amount, date, imageUrl } = req.body;
 
-        const query = "INSERT INTO expenses (userFirebaseID, title, amount, date, imageUrl) VALUES ($1, $2, $3, $4, $5) RETURNING id";
+        // Get the token from the Authorization header
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ error: "Authorization token required" });
+        }
+
+        // Verify the token and extract userFirebaseID
+        const decoded = jwt.verify(token, SECRET_KEY);
+        const userFirebaseID = decoded.id; // Use the ID from the decoded JWT
+
+        // Insert new expense using the userFirebaseID
+        const query =
+            "INSERT INTO expenses (userFirebaseID, title, amount, date, imageUrl) VALUES ($1, $2, $3, $4, $5) RETURNING id";
         const params = [userFirebaseID, title, amount, date, imageUrl];
 
         const result = await client.query(query, params);
         res.status(201).json({
             status: "success",
             data: { id: result.rows[0].id, title, amount, date, imageUrl },
-            message: "Expenses created successfully",
+            message: "Expense created successfully",
         });
     } catch (error) {
         console.error(error);
@@ -142,13 +136,23 @@ app.post("/expenses", authorize, async (req, res) => {
 });
 
 // get - Read expenses
-app.get("/expenses", authorize, async (req, res) => {
+app.get("/expenses", async (req, res) => {
     const client = await pool.connect();
     try {
-        const userFirebaseID = req.user.id; // Use user info from the middleware
+        // Get the token from the Authorization header
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ error: "Authorization token required" });
+        }
 
+        // Verify the token and extract userFirebaseID
+        const decoded = jwt.verify(token, SECRET_KEY);
+        const userFirebaseID = decoded.id; // Use the ID from the decoded JWT
+
+        // Fetch expenses for the logged-in user
         const query = "SELECT * FROM expenses WHERE userFirebaseID = $1";
         const result = await client.query(query, [userFirebaseID]);
+
         res.json(result.rows);
     } catch (error) {
         console.error(error);
